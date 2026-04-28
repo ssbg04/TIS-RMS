@@ -16,14 +16,17 @@ class _DocumentsTabState extends State<DocumentsTab> {
 
   @override
   Widget build(BuildContext context) {
+    // Detect screen width for responsive layout
+    final bool isMobile = MediaQuery.of(context).size.width < 850;
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(30.0),
+      padding: EdgeInsets.all(isMobile ? 20.0 : 30.0), // Smaller padding on phones
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(),
           const SizedBox(height: 30),
-          _buildStatCards(),
+          _buildStatCards(isMobile),
           const SizedBox(height: 30),
           _buildDocumentTableSection(),
         ],
@@ -32,8 +35,11 @@ class _DocumentsTabState extends State<DocumentsTab> {
   }
 
   Widget _buildHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    // Replaced Row with Wrap so the Print button drops down on small screens
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      runSpacing: 15,
       children: [
         const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -59,18 +65,41 @@ class _DocumentsTabState extends State<DocumentsTab> {
     );
   }
 
-  Widget _buildStatCards() {
-    return Row(
-      children: [
-        Expanded(child: _statCard('Total Documents', '5', Icons.description, Colors.blue.shade700)),
-        const SizedBox(width: 20),
-        Expanded(child: _statCard('Verified', '4', Icons.check_circle, Colors.green)),
-        const SizedBox(width: 20),
-        Expanded(child: _statCard('Pending Review', '1', Icons.access_time_filled, Colors.orange)),
-        const SizedBox(width: 20),
-        Expanded(child: _statCard('Rejected', '0', Icons.cancel, Colors.red)),
-      ],
-    );
+  Widget _buildStatCards(bool isMobile) {
+    // 2x2 Grid for mobile, Row of 4 for desktop
+    if (isMobile) {
+      return Column(
+        children: [
+          Row(
+            children: [
+              Expanded(child: _statCard('Total Documents', '5', Icons.description, Colors.blue.shade700)),
+              const SizedBox(width: 15),
+              Expanded(child: _statCard('Verified', '4', Icons.check_circle, Colors.green)),
+            ],
+          ),
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              Expanded(child: _statCard('Pending Review', '1', Icons.access_time_filled, Colors.orange)),
+              const SizedBox(width: 15),
+              Expanded(child: _statCard('Rejected', '0', Icons.cancel, Colors.red)),
+            ],
+          ),
+        ],
+      );
+    } else {
+      return Row(
+        children: [
+          Expanded(child: _statCard('Total Documents', '5', Icons.description, Colors.blue.shade700)),
+          const SizedBox(width: 20),
+          Expanded(child: _statCard('Verified', '4', Icons.check_circle, Colors.green)),
+          const SizedBox(width: 20),
+          Expanded(child: _statCard('Pending Review', '1', Icons.access_time_filled, Colors.orange)),
+          const SizedBox(width: 20),
+          Expanded(child: _statCard('Rejected', '0', Icons.cancel, Colors.red)),
+        ],
+      );
+    }
   }
 
   Widget _statCard(String title, String count, IconData icon, Color iconColor) {
@@ -88,7 +117,7 @@ class _DocumentsTabState extends State<DocumentsTab> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title, style: const TextStyle(color: Colors.black54, fontSize: 13)),
+              Expanded(child: Text(title, style: const TextStyle(color: Colors.black54, fontSize: 13), overflow: TextOverflow.ellipsis)),
               Icon(icon, color: iconColor, size: 24),
             ],
           ),
@@ -101,7 +130,7 @@ class _DocumentsTabState extends State<DocumentsTab> {
 
   Widget _buildDocumentTableSection() {
     return Container(
-      padding: const EdgeInsets.all(25),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(10),
@@ -111,9 +140,11 @@ class _DocumentsTabState extends State<DocumentsTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top Row: Title and Upload Button
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          // Top Row: Title and Upload Button (Responsive Wrap)
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            runSpacing: 15,
             children: [
               const Text('All Documents', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ElevatedButton.icon(
@@ -132,16 +163,20 @@ class _DocumentsTabState extends State<DocumentsTab> {
           ),
           const SizedBox(height: 20),
           
-          // Second Row: Search and Filters
-          Row(
+          // Second Row: Search and Filters (Responsive Wrap)
+          Wrap(
+            spacing: 15,
+            runSpacing: 15,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(
-                flex: 3,
+              Container(
+                constraints: const BoxConstraints(maxWidth: 350), // Allows shrinking on very small phones
+                height: 35,
                 child: TextField(
                   decoration: InputDecoration(
                     hintText: 'Search students, documents, or records...',
                     hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
-                    prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                    prefixIcon: const Icon(Icons.search, color: Colors.grey, size: 18),
                     filled: true,
                     fillColor: Colors.grey.shade50,
                     contentPadding: const EdgeInsets.symmetric(vertical: 0),
@@ -156,13 +191,11 @@ class _DocumentsTabState extends State<DocumentsTab> {
                   ),
                 ),
               ),
-              const SizedBox(width: 15),
               _buildDropdown(
                 value: _selectedType,
                 items: ['All Types', 'Birth Certificate', 'Report Card', 'Medical Certificate', 'Good Moral'],
                 onChanged: (val) => setState(() => _selectedType = val!),
               ),
-              const SizedBox(width: 15),
               _buildDropdown(
                 value: _selectedStatus,
                 items: ['All Status', 'Verified', 'Pending', 'Rejected'],
@@ -172,30 +205,33 @@ class _DocumentsTabState extends State<DocumentsTab> {
           ),
           const SizedBox(height: 20),
 
-          // The Data Table
+          // The Data Table wrapped in a Horizontal ScrollView for mobile screens
           SizedBox(
             width: double.infinity,
-            child: DataTable(
-              headingRowColor: WidgetStateProperty.resolveWith((states) => Colors.grey.shade50),
-              dataRowMinHeight: 50,
-              dataRowMaxHeight: 50,
-              horizontalMargin: 10,
-              columns: const [
-                DataColumn(label: Text('Student Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text('Document Type', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text('File Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text('Upload Date', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text('Size', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-              ],
-              rows: [
-                _buildDataRow('Maria Santos Cruz', 'Birth Certificate', 'birth_cert_maria_cruz.pdf', '2024-05-15', '2.3 MB', 'Verified'),
-                _buildDataRow('Maria Santos Cruz', 'Report Card', 'report_card_grade10.pdf', '2024-05-16', '1.8 MB', 'Verified'),
-                _buildDataRow('Juan Reyes Garcia', 'Birth Certificate', 'birth_cert_juan_garcia.pdf', '2024-05-18', '2.1 MB', 'Verified'),
-                _buildDataRow('Juan Reyes Garcia', 'Medical Certificate', 'medical_cert_garcia.pdf', '2024-05-18', '1.5 MB', 'Pending'),
-                _buildDataRow('Ana Lopez Mendoza', 'Good Moral', 'good_moral_ana.pdf', '2024-05-20', '1.2 MB', 'Verified'),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                headingRowColor: WidgetStateProperty.resolveWith((states) => Colors.grey.shade50),
+                dataRowMinHeight: 50,
+                dataRowMaxHeight: 50,
+                horizontalMargin: 10,
+                columns: const [
+                  DataColumn(label: Text('Student Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Document Type', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('File Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Upload Date', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Size', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                ],
+                rows: [
+                  _buildDataRow('Maria Santos Cruz', 'Birth Certificate', 'birth_cert_maria_cruz.pdf', '2024-05-15', '2.3 MB', 'Verified'),
+                  _buildDataRow('Maria Santos Cruz', 'Report Card', 'report_card_grade10.pdf', '2024-05-16', '1.8 MB', 'Verified'),
+                  _buildDataRow('Juan Reyes Garcia', 'Birth Certificate', 'birth_cert_juan_garcia.pdf', '2024-05-18', '2.1 MB', 'Verified'),
+                  _buildDataRow('Juan Reyes Garcia', 'Medical Certificate', 'medical_cert_garcia.pdf', '2024-05-18', '1.5 MB', 'Pending'),
+                  _buildDataRow('Ana Lopez Mendoza', 'Good Moral', 'good_moral_ana.pdf', '2024-05-20', '1.2 MB', 'Verified'),
+                ],
+              ),
             ),
           ),
         ],
@@ -205,6 +241,7 @@ class _DocumentsTabState extends State<DocumentsTab> {
 
   Widget _buildDropdown({required String value, required List<String> items, required Function(String?) onChanged}) {
     return Container(
+      height: 35,
       padding: const EdgeInsets.symmetric(horizontal: 15),
       decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
       child: DropdownButtonHideUnderline(
@@ -226,6 +263,7 @@ class _DocumentsTabState extends State<DocumentsTab> {
       cells: [
         DataCell(Text(name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
         DataCell(Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.description_outlined, size: 16, color: Colors.grey),
             const SizedBox(width: 5),
@@ -247,7 +285,7 @@ class _DocumentsTabState extends State<DocumentsTab> {
                 padding: const EdgeInsets.only(right: 8),
               ),
               IconButton(
-                icon: const Icon(Icons.download_outlined, size: 18, color: Colors.black54), // Swapped edit for download
+                icon: const Icon(Icons.download_outlined, size: 18, color: Colors.black54),
                 onPressed: () {},
                 constraints: const BoxConstraints(),
                 padding: EdgeInsets.zero,

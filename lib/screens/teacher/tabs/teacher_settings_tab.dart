@@ -1,15 +1,130 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../auth/login_screen.dart'; 
 
-class TeacherSettingsTab extends StatelessWidget {
+class TeacherSettingsTab extends StatefulWidget {
   const TeacherSettingsTab({super.key});
 
+  @override
+  State<TeacherSettingsTab> createState() => _TeacherSettingsTabState();
+}
+
+class _TeacherSettingsTabState extends State<TeacherSettingsTab> {
   final Color primaryGreen = const Color(0xFF0F8241);
   final Color cardBg = Colors.white;
 
+  // Controllers to hold the text data
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+
+  bool _isLoading = true;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  // --- 1. FETCH DATA FROM FIREBASE ---
+  Future<void> _loadUserData() async {
+    try {
+      final User? currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .get();
+
+        if (userDoc.exists) {
+          final data = userDoc.data() as Map<String, dynamic>;
+          
+          // Handle the phone number conversion for the UI
+          String rawPhone = data['phone'] ?? '';
+          String displayPhone = rawPhone;
+          
+          // If it's stored as 09xx, strip the 0 so it sits nicely next to the +63
+          if (rawPhone.startsWith('0')) {
+            displayPhone = rawPhone.substring(1);
+          } else if (rawPhone.startsWith('+63')) {
+            displayPhone = rawPhone.substring(3).trim(); 
+          }
+
+          setState(() {
+            _nameController.text = data['full_name'] ?? '';
+            _emailController.text = data['email'] ?? currentUser.email ?? '';
+            _phoneController.text = displayPhone; 
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading profile: $e'), backgroundColor: Colors.red),
+        );
+      }
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // --- 2. UPDATE DATA IN FIREBASE ---
+  Future<void> _updateUserData() async {
+    setState(() => _isSaving = true);
+    
+    try {
+      final User? currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        
+        // Take the 9xx number from the UI and format it back to 09xx for the database
+        String formattedPhoneToSave = _phoneController.text.trim();
+        if (formattedPhoneToSave.startsWith('9') && formattedPhoneToSave.length == 10) {
+          formattedPhoneToSave = '0$formattedPhoneToSave';
+        }
+
+        // Update ONLY the full_name and phone fields
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .update({
+          'full_name': _nameController.text.trim(),
+          'phone': formattedPhoneToSave, // Saves as 09xx safely to the cloud
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.green),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating profile: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(30.0),
       child: Column(
@@ -26,7 +141,7 @@ class TeacherSettingsTab extends StatelessWidget {
   }
 
   Widget _buildHeader() {
-    // Removed the Row with the Dropdown and Export button as requested!
+    // Top right buttons are deliberately removed for Teacher role
     return const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -52,16 +167,26 @@ class TeacherSettingsTab extends StatelessWidget {
         children: [
           const Text('Account Information', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 30),
-          _buildTextField('Full Name', 'Teacher Name'),
+          
+          // Editable Full Name
+          _buildTextField('Full Name', 'Enter your full name', _nameController, false),
           const SizedBox(height: 20),
-          _buildTextField('Email Address', 'teacher@talisay.edu.ph'),
+          
+          // Read-only Email
+          _buildTextField('Email Address', 'Enter your email', _emailController, true),
           const SizedBox(height: 20),
-          _buildTextField('Phone Number', '+63 912 345 6789'),
+          
+          // ✅ Editable Phone Number with +63 visually locked and limited to exactly 10 digits
+          _buildTextField('Phone Number', '912 345 6789', _phoneController, false, prefixText: '+63 ', maxLength: 10),
           const SizedBox(height: 30),
+          
+          // Save Button with Loading State
           ElevatedButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.save, color: Colors.white, size: 18),
-            label: const Text('Save Changes', style: TextStyle(color: Colors.white)),
+            onPressed: _isSaving ? null : _updateUserData,
+            icon: _isSaving 
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                : const Icon(Icons.save, color: Colors.white, size: 18),
+            label: Text(_isSaving ? 'Saving...' : 'Save Changes', style: const TextStyle(color: Colors.white)),
             style: ElevatedButton.styleFrom(
               backgroundColor: primaryGreen,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
@@ -73,23 +198,37 @@ class TeacherSettingsTab extends StatelessWidget {
     );
   }
 
-  Widget _buildTextField(String label, String placeholder) {
+  // Dynamic TextField Builder supporting readOnly, prefixText, and maxLength formatters
+  Widget _buildTextField(String label, String placeholder, TextEditingController controller, bool isReadOnly, {String? prefixText, int? maxLength}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: const TextStyle(color: Colors.black87, fontSize: 13)),
         const SizedBox(height: 8),
-        SizedBox(
-          width: 500, 
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500), 
           child: TextField(
+            controller: controller,
+            readOnly: isReadOnly,
+            keyboardType: prefixText != null ? TextInputType.phone : TextInputType.text, // Trigger number pad on mobile for phone
+            
+            // ✅ THIS ENFORCES THE 10 DIGIT LIMIT AND ONLY ALLOWS NUMBERS TO BE TYPED
+            inputFormatters: maxLength != null 
+                ? [LengthLimitingTextInputFormatter(maxLength), FilteringTextInputFormatter.digitsOnly] 
+                : null,
+                
+            style: TextStyle(color: isReadOnly ? Colors.black54 : Colors.black87),
             decoration: InputDecoration(
+              prefixText: prefixText, // Injects the +63 into the UI
+              prefixStyle: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 16),
               hintText: placeholder,
               hintStyle: const TextStyle(color: Colors.black54),
               filled: true,
-              fillColor: Colors.grey.shade50,
+              fillColor: isReadOnly ? Colors.grey.shade200 : Colors.grey.shade50,
               contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
               enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: primaryGreen)),
             ),
           ),
         ),

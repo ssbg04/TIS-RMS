@@ -7,23 +7,37 @@ class DashboardTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Detect screen width for responsive layout
+    final bool isMobile = MediaQuery.of(context).size.width < 850;
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(30.0),
+      padding: EdgeInsets.all(isMobile ? 20.0 : 30.0), // Adapt padding for mobile
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(),
           const SizedBox(height: 30),
-          _buildStatCards(),
+          _buildStatCards(isMobile),
           const SizedBox(height: 30),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 3, child: _buildRecentActivities()),
-              const SizedBox(width: 30),
-              Expanded(flex: 2, child: _buildPendingTasks()),
-            ],
-          ),
+          
+          // Responsive layout for the main content area
+          if (isMobile)
+            Column(
+              children: [
+                _buildRecentActivities(),
+                const SizedBox(height: 20),
+                _buildPendingTasks(),
+              ],
+            )
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 3, child: _buildRecentActivities()),
+                const SizedBox(width: 30),
+                Expanded(flex: 2, child: _buildPendingTasks()),
+              ],
+            ),
         ],
       ),
     );
@@ -40,18 +54,41 @@ class DashboardTab extends StatelessWidget {
     );
   }
 
-  Widget _buildStatCards() {
-    return Row(
-      children: [
-        Expanded(child: _statCard('Total Students', '32')),
-        const SizedBox(width: 20),
-        Expanded(child: _statCard('Document Processed', '7')),
-        const SizedBox(width: 20),
-        Expanded(child: _statCard('Archived Records', '123')),
-        const SizedBox(width: 20),
-        Expanded(child: _statCard('Active Records', '52')),
-      ],
-    );
+  Widget _buildStatCards(bool isMobile) {
+    // 2x2 Grid for mobile, Row of 4 for desktop
+    if (isMobile) {
+      return Column(
+        children: [
+          Row(
+            children: [
+              Expanded(child: _statCard('Total Students', '32')),
+              const SizedBox(width: 15),
+              Expanded(child: _statCard('Document Processed', '7')),
+            ],
+          ),
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              Expanded(child: _statCard('Archived Records', '123')),
+              const SizedBox(width: 15),
+              Expanded(child: _statCard('Active Records', '52')),
+            ],
+          ),
+        ],
+      );
+    } else {
+      return Row(
+        children: [
+          Expanded(child: _statCard('Total Students', '32')),
+          const SizedBox(width: 20),
+          Expanded(child: _statCard('Document Processed', '7')),
+          const SizedBox(width: 20),
+          Expanded(child: _statCard('Archived Records', '123')),
+          const SizedBox(width: 20),
+          Expanded(child: _statCard('Active Records', '52')),
+        ],
+      );
+    }
   }
 
   Widget _statCard(String title, String count) {
@@ -65,7 +102,7 @@ class DashboardTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(color: Colors.black54, fontSize: 14)),
+          Text(title, style: const TextStyle(color: Colors.black54, fontSize: 13), overflow: TextOverflow.ellipsis),
           const SizedBox(height: 10),
           Text(count, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
         ],
@@ -75,6 +112,7 @@ class DashboardTab extends StatelessWidget {
 
   Widget _buildRecentActivities() {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(25),
       decoration: BoxDecoration(
         color: cardBg,
@@ -119,6 +157,7 @@ class DashboardTab extends StatelessWidget {
 
   Widget _buildPendingTasks() {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(25),
       decoration: BoxDecoration(
         color: cardBg,

@@ -20,7 +20,7 @@ class TISRMSApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'TIS_RMS',
+      title: 'TIS Record Management System',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0F8241)),

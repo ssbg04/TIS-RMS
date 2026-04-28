@@ -106,7 +106,9 @@ class _TISRMSLoginScreenState extends State<TISRMSLoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
+      backgroundColor: gradientEnd,
+      body: SafeArea (
+        child: Container(
         width: double.infinity,
         height: double.infinity,
         decoration: BoxDecoration(
@@ -146,6 +148,7 @@ class _TISRMSLoginScreenState extends State<TISRMSLoginScreen> {
             },
           ),
         ),
+      ),
       ),
     );
   }

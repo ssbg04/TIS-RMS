@@ -15,14 +15,17 @@ class _StudentsTabState extends State<StudentsTab> {
 
   @override
   Widget build(BuildContext context) {
+    // Detect screen width for responsive layout
+    final bool isMobile = MediaQuery.of(context).size.width < 850;
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(30.0),
+      padding: EdgeInsets.all(isMobile ? 20.0 : 30.0), // Smaller padding on mobile
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(),
           const SizedBox(height: 30),
-          _buildStatCards(),
+          _buildStatCards(isMobile),
           const SizedBox(height: 30),
           _buildStudentTableSection(),
         ],
@@ -41,18 +44,41 @@ class _StudentsTabState extends State<StudentsTab> {
     );
   }
 
-  Widget _buildStatCards() {
-    return Row(
-      children: [
-        Expanded(child: _statCard('No of Student Records', '5')),
-        const SizedBox(width: 20),
-        Expanded(child: _statCard('Active Students', '4')),
-        const SizedBox(width: 20),
-        Expanded(child: _statCard('Graduated', '1')),
-        const SizedBox(width: 20),
-        Expanded(child: _statCard('Transferred/ Dropped', '0')),
-      ],
-    );
+  Widget _buildStatCards(bool isMobile) {
+    // 2x2 Grid for mobile, Row of 4 for desktop
+    if (isMobile) {
+      return Column(
+        children: [
+          Row(
+            children: [
+              Expanded(child: _statCard('No of Student Records', '5')),
+              const SizedBox(width: 15),
+              Expanded(child: _statCard('Active Students', '4')),
+            ],
+          ),
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              Expanded(child: _statCard('Graduated', '1')),
+              const SizedBox(width: 15),
+              Expanded(child: _statCard('Transferred/ Dropped', '0')),
+            ],
+          ),
+        ],
+      );
+    } else {
+      return Row(
+        children: [
+          Expanded(child: _statCard('No of Student Records', '5')),
+          const SizedBox(width: 20),
+          Expanded(child: _statCard('Active Students', '4')),
+          const SizedBox(width: 20),
+          Expanded(child: _statCard('Graduated', '1')),
+          const SizedBox(width: 20),
+          Expanded(child: _statCard('Transferred/ Dropped', '0')),
+        ],
+      );
+    }
   }
 
   Widget _statCard(String title, String count) {
@@ -67,7 +93,7 @@ class _StudentsTabState extends State<StudentsTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(color: Colors.black54, fontSize: 13)),
+          Text(title, style: const TextStyle(color: Colors.black54, fontSize: 13), overflow: TextOverflow.ellipsis),
           const SizedBox(height: 10),
           Text(count, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
         ],
@@ -77,7 +103,7 @@ class _StudentsTabState extends State<StudentsTab> {
 
   Widget _buildStudentTableSection() {
     return Container(
-      padding: const EdgeInsets.all(25),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(10),
@@ -87,9 +113,11 @@ class _StudentsTabState extends State<StudentsTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top Row: Title and Add Button
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          // Top Row: Title and Add Button (Responsive Wrap)
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            runSpacing: 15,
             children: [
               const Text('All Students', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ElevatedButton.icon(
@@ -108,11 +136,15 @@ class _StudentsTabState extends State<StudentsTab> {
           ),
           const SizedBox(height: 20),
           
-          // Second Row: Search and Filter
-          Row(
+          // Second Row: Search and Filter (Responsive Wrap)
+          Wrap(
+            spacing: 15,
+            runSpacing: 15,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(
-                flex: 3,
+              Container(
+                constraints: const BoxConstraints(maxWidth: 350), // Allows shrinking on very small phones
+                height: 35,
                 child: TextField(
                   decoration: InputDecoration(
                     hintText: 'Search by name or student number....',
@@ -132,8 +164,8 @@ class _StudentsTabState extends State<StudentsTab> {
                   ),
                 ),
               ),
-              const SizedBox(width: 15),
               Container(
+                height: 35,
                 padding: const EdgeInsets.symmetric(horizontal: 15),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade200,
@@ -163,30 +195,33 @@ class _StudentsTabState extends State<StudentsTab> {
           ),
           const SizedBox(height: 20),
 
-          // The Data Table
+          // The Data Table wrapped in a Horizontal ScrollView for mobile screens
           SizedBox(
             width: double.infinity,
-            child: DataTable(
-              headingRowColor: WidgetStateProperty.resolveWith((states) => Colors.grey.shade50),
-              dataRowMinHeight: 50,
-              dataRowMaxHeight: 50,
-              horizontalMargin: 10,
-              columns: const [
-                DataColumn(label: Text('Student Number', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text('Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text('Grade Level', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text('Section', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text('Guardian', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-              ],
-              rows: [
-                _buildDataRow('2024-001', 'Maria Santos Cruz', 'Grade 11', 'STEM-A', 'Active', 'Juan Cruz'),
-                _buildDataRow('2024-002', 'Juan Reyes Garcia', 'Grade 10', 'Diamond', 'Active', 'Rosa Garcia'),
-                _buildDataRow('2024-003', 'Ana Lopez Mendoza', 'Grade 11', 'STEM-A', 'Active', 'Pedro Mendoza'),
-                _buildDataRow('2020-045', 'Carlos Ramos Fernandez', 'Grade 12', 'ABM-A', 'Graduated', 'Elena Fernandez'),
-                _buildDataRow('2024-004', 'Sofia Torres Villanueva', 'Grade 10', 'Diamond', 'Active', 'Miguel Villanueva'),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                headingRowColor: WidgetStateProperty.resolveWith((states) => Colors.grey.shade50),
+                dataRowMinHeight: 50,
+                dataRowMaxHeight: 50,
+                horizontalMargin: 10,
+                columns: const [
+                  DataColumn(label: Text('Student Number', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Grade Level', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Section', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Guardian', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                ],
+                rows: [
+                  _buildDataRow('2024-001', 'Maria Santos Cruz', 'Grade 11', 'STEM-A', 'Active', 'Juan Cruz'),
+                  _buildDataRow('2024-002', 'Juan Reyes Garcia', 'Grade 10', 'Diamond', 'Active', 'Rosa Garcia'),
+                  _buildDataRow('2024-003', 'Ana Lopez Mendoza', 'Grade 11', 'STEM-A', 'Active', 'Pedro Mendoza'),
+                  _buildDataRow('2020-045', 'Carlos Ramos Fernandez', 'Grade 12', 'ABM-A', 'Graduated', 'Elena Fernandez'),
+                  _buildDataRow('2024-004', 'Sofia Torres Villanueva', 'Grade 10', 'Diamond', 'Active', 'Miguel Villanueva'),
+                ],
+              ),
             ),
           ),
         ],

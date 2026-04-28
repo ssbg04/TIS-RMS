@@ -16,18 +16,21 @@ class _ArchivesTabState extends State<ArchivesTab> {
 
   @override
   Widget build(BuildContext context) {
+    // Detect screen width for responsive layout
+    final bool isMobile = MediaQuery.of(context).size.width < 850;
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(30.0),
+      padding: EdgeInsets.all(isMobile ? 20.0 : 30.0), // Smaller padding on phones
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(),
           const SizedBox(height: 30),
-          _buildStatCards(),
+          _buildStatCards(isMobile),
           const SizedBox(height: 30),
-          _buildAlgorithmInfoCards(),
+          _buildAlgorithmInfoCards(isMobile),
           const SizedBox(height: 30),
-          _buildArchivedTableSection(),
+          _buildArchivedTableSection(isMobile),
         ],
       ),
     );
@@ -44,18 +47,41 @@ class _ArchivesTabState extends State<ArchivesTab> {
     );
   }
 
-  Widget _buildStatCards() {
-    return Row(
-      children: [
-        Expanded(child: _statCard('Total Archived', '32')),
-        const SizedBox(width: 20),
-        Expanded(child: _statCard('Graduated', '7')),
-        const SizedBox(width: 20),
-        Expanded(child: _statCard('Transferred', '123')),
-        const SizedBox(width: 20),
-        Expanded(child: _statCard('This Year', '52')),
-      ],
-    );
+  Widget _buildStatCards(bool isMobile) {
+    // 2x2 Grid for mobile, Row of 4 for desktop
+    if (isMobile) {
+      return Column(
+        children: [
+          Row(
+            children: [
+              Expanded(child: _statCard('Total Archived', '32')),
+              const SizedBox(width: 15),
+              Expanded(child: _statCard('Graduated', '7')),
+            ],
+          ),
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              Expanded(child: _statCard('Transferred', '123')),
+              const SizedBox(width: 15),
+              Expanded(child: _statCard('This Year', '52')),
+            ],
+          ),
+        ],
+      );
+    } else {
+      return Row(
+        children: [
+          Expanded(child: _statCard('Total Archived', '32')),
+          const SizedBox(width: 20),
+          Expanded(child: _statCard('Graduated', '7')),
+          const SizedBox(width: 20),
+          Expanded(child: _statCard('Transferred', '123')),
+          const SizedBox(width: 20),
+          Expanded(child: _statCard('This Year', '52')),
+        ],
+      );
+    }
   }
 
   Widget _statCard(String title, String count) {
@@ -78,9 +104,10 @@ class _ArchivesTabState extends State<ArchivesTab> {
     );
   }
 
-  Widget _buildAlgorithmInfoCards() {
+  Widget _buildAlgorithmInfoCards(bool isMobile) {
     return Container(
       padding: const EdgeInsets.all(25),
+      width: double.infinity,
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(10),
@@ -92,16 +119,28 @@ class _ArchivesTabState extends State<ArchivesTab> {
         children: [
           const Text('Automatic Archiving Algorithm', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: _infoCard('Retention Period', Icons.calendar_today, Colors.blue.shade50, Colors.blue.shade700, ['Records are automatically archived after:', '• Graduated students: After 3 years', '• Transferred students: After 2 years', '• Inactive records: After 5 years'])),
-              const SizedBox(width: 15),
-              Expanded(child: _infoCard('Archive Process', Icons.archive_outlined, Colors.green.shade50, Colors.green.shade700, ['Automated workflow:', '• Daily scan at midnight', '• Identify eligible records', '• Secure data transfer', '• Generate archive report'])),
-              const SizedBox(width: 15),
-              Expanded(child: _infoCard('Data Recovery', Icons.restore, Colors.cyan.shade50, Colors.cyan.shade700, ['Archived records can be:', '• Retrieved anytime', '• Restored to active status', '• Exported for backup', '• Permanently deleted'])),
-            ],
-          ),
+          // Stack cards vertically on mobile, side-by-side horizontally on desktop
+          if (isMobile)
+            Column(
+              children: [
+                _infoCard('Retention Period', Icons.calendar_today, Colors.blue.shade50, Colors.blue.shade700, ['Records are automatically archived after:', '• Graduated students: After 3 years', '• Transferred students: After 2 years', '• Inactive records: After 5 years']),
+                const SizedBox(height: 15),
+                _infoCard('Archive Process', Icons.archive_outlined, Colors.green.shade50, Colors.green.shade700, ['Automated workflow:', '• Daily scan at midnight', '• Identify eligible records', '• Secure data transfer', '• Generate archive report']),
+                const SizedBox(height: 15),
+                _infoCard('Data Recovery', Icons.restore, Colors.cyan.shade50, Colors.cyan.shade700, ['Archived records can be:', '• Retrieved anytime', '• Restored to active status', '• Exported for backup', '• Permanently deleted']),
+              ],
+            )
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _infoCard('Retention Period', Icons.calendar_today, Colors.blue.shade50, Colors.blue.shade700, ['Records are automatically archived after:', '• Graduated students: After 3 years', '• Transferred students: After 2 years', '• Inactive records: After 5 years'])),
+                const SizedBox(width: 15),
+                Expanded(child: _infoCard('Archive Process', Icons.archive_outlined, Colors.green.shade50, Colors.green.shade700, ['Automated workflow:', '• Daily scan at midnight', '• Identify eligible records', '• Secure data transfer', '• Generate archive report'])),
+                const SizedBox(width: 15),
+                Expanded(child: _infoCard('Data Recovery', Icons.restore, Colors.cyan.shade50, Colors.cyan.shade700, ['Archived records can be:', '• Retrieved anytime', '• Restored to active status', '• Exported for backup', '• Permanently deleted'])),
+              ],
+            ),
         ],
       ),
     );
@@ -109,6 +148,7 @@ class _ArchivesTabState extends State<ArchivesTab> {
 
   Widget _infoCard(String title, IconData icon, Color bgColor, Color iconColor, List<String> details) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(10)),
       child: Column(
@@ -131,7 +171,7 @@ class _ArchivesTabState extends State<ArchivesTab> {
     );
   }
 
-  Widget _buildArchivedTableSection() {
+  Widget _buildArchivedTableSection(bool isMobile) {
     return Container(
       padding: const EdgeInsets.all(25),
       decoration: BoxDecoration(
@@ -145,10 +185,16 @@ class _ArchivesTabState extends State<ArchivesTab> {
         children: [
           const Text('Archived Records', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
-          Row(
+          
+          // Wrap allows the search bar and dropdowns to flow to the next line on small screens
+          Wrap(
+            spacing: 15,
+            runSpacing: 15,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(
-                flex: 3,
+              Container(
+                constraints: const BoxConstraints(maxWidth: 350),
+                height: 35,
                 child: TextField(
                   decoration: InputDecoration(
                     hintText: 'Search by name or student number....',
@@ -162,31 +208,34 @@ class _ArchivesTabState extends State<ArchivesTab> {
                   ),
                 ),
               ),
-              const SizedBox(width: 15),
               _buildDropdown(value: _selectedType, items: ['All Types', 'Student', 'Document'], onChanged: (val) => setState(() => _selectedType = val!)),
-              const SizedBox(width: 15),
               _buildDropdown(value: _selectedReason, items: ['All Reasons', 'Graduated', 'Transferred', 'Inactive'], onChanged: (val) => setState(() => _selectedReason = val!)),
             ],
           ),
           const SizedBox(height: 20),
+          
+          // Wrap the DataTable in a horizontal scroll view to prevent overflow on phones
           SizedBox(
             width: double.infinity,
-            child: DataTable(
-              headingRowColor: WidgetStateProperty.resolveWith((states) => Colors.grey.shade50),
-              dataRowMinHeight: 50,
-              dataRowMaxHeight: 50,
-              columns: const [
-                DataColumn(label: Text('Student Number', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text('Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text('Grade Level', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text('Section', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text('Guardian', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-              ],
-              rows: [
-                _buildDataRow('2020-045', 'Carlos Ramos Fernandez', 'Grade 12', 'ABM-A', 'Graduated', 'Elena Fernandez'),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                headingRowColor: WidgetStateProperty.resolveWith((states) => Colors.grey.shade50),
+                dataRowMinHeight: 50,
+                dataRowMaxHeight: 50,
+                columns: const [
+                  DataColumn(label: Text('Student Number', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Grade Level', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Section', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Guardian', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                ],
+                rows: [
+                  _buildDataRow('2020-045', 'Carlos Ramos Fernandez', 'Grade 12', 'ABM-A', 'Graduated', 'Elena Fernandez'),
+                ],
+              ),
             ),
           ),
         ],
@@ -196,6 +245,7 @@ class _ArchivesTabState extends State<ArchivesTab> {
 
   Widget _buildDropdown({required String value, required List<String> items, required Function(String?) onChanged}) {
     return Container(
+      height: 35,
       padding: const EdgeInsets.symmetric(horizontal: 15),
       decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
       child: DropdownButtonHideUnderline(

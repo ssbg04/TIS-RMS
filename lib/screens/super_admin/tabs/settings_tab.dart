@@ -1,15 +1,131 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../auth/login_screen.dart'; // Ensure path is correct
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../auth/login_screen.dart'; 
 
-class SettingsTab extends StatelessWidget {
+class SettingsTab extends StatefulWidget {
   const SettingsTab({super.key});
 
+  @override
+  State<SettingsTab> createState() => _SettingsTabState();
+}
+
+class _SettingsTabState extends State<SettingsTab> {
   final Color primaryGreen = const Color(0xFF0F8241);
   final Color cardBg = Colors.white;
 
+  // Controllers to hold the text data
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+
+  bool _isLoading = true;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  // --- 1. FETCH DATA FROM FIREBASE ---
+  Future<void> _loadUserData() async {
+    try {
+      final User? currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        // Fetch the document from the 'users' collection using the UID
+        DocumentSnapshot userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .get();
+
+        if (userDoc.exists) {
+          final data = userDoc.data() as Map<String, dynamic>;
+          
+          // Handle the phone number conversion for the UI
+          String rawPhone = data['phone'] ?? '';
+          String displayPhone = rawPhone;
+          
+          // If it's stored as 09xx, strip the 0 so it sits nicely next to the +63
+          if (rawPhone.startsWith('0')) {
+            displayPhone = rawPhone.substring(1);
+          } else if (rawPhone.startsWith('+63')) {
+            displayPhone = rawPhone.substring(3).trim(); 
+          }
+
+          setState(() {
+            _nameController.text = data['full_name'] ?? '';
+            _emailController.text = data['email'] ?? currentUser.email ?? '';
+            _phoneController.text = displayPhone; 
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading profile: $e'), backgroundColor: Colors.red),
+        );
+      }
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // --- 2. UPDATE DATA IN FIREBASE ---
+  Future<void> _updateUserData() async {
+    setState(() => _isSaving = true);
+    
+    try {
+      final User? currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        
+        // Take the 9xx number from the UI and format it back to 09xx for the database
+        String formattedPhoneToSave = _phoneController.text.trim();
+        if (formattedPhoneToSave.startsWith('9') && formattedPhoneToSave.length == 10) {
+          formattedPhoneToSave = '0$formattedPhoneToSave';
+        }
+
+        // Update ONLY the full_name and phone fields
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .update({
+          'full_name': _nameController.text.trim(),
+          'phone': formattedPhoneToSave, // Saves as 09xx safely to the cloud
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.green),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating profile: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(30.0),
       child: Column(
@@ -26,45 +142,12 @@ class SettingsTab extends StatelessWidget {
   }
 
   Widget _buildHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Account Settings', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            SizedBox(height: 5),
-            Text('Manage your account settings and preferences', style: TextStyle(color: Colors.black54)),
-          ],
-        ),
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 2),
-              decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: 'SY 2024-2025',
-                  icon: const Icon(Icons.keyboard_arrow_down, size: 20),
-                  style: const TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.bold),
-                  onChanged: (val) {},
-                  items: ['SY 2024-2025'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
-                ),
-              ),
-            ),
-            const SizedBox(width: 15),
-            ElevatedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.download_outlined, color: Colors.white, size: 18),
-              label: const Text('Export Report', style: TextStyle(color: Colors.white)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryGreen,
-                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-            ),
-          ],
-        ),
+        Text('Account Settings', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        SizedBox(height: 5),
+        Text('Manage your account settings and preferences', style: TextStyle(color: Colors.black54)),
       ],
     );
   }
@@ -84,16 +167,26 @@ class SettingsTab extends StatelessWidget {
         children: [
           const Text('Account Information', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 30),
-          _buildTextField('Full Name', 'Admin'),
+          
+          // Editable Full Name
+          _buildTextField('Full Name', 'Enter your full name', _nameController, false),
           const SizedBox(height: 20),
-          _buildTextField('Email Address', 'TalisayIHS@gmail.com'),
+          
+          // Read-only Email
+          _buildTextField('Email Address', 'Enter your email', _emailController, true),
           const SizedBox(height: 20),
-          _buildTextField('Phone Number', '+63 912 345 6789'),
+          
+          // Editable Phone Number with +63 visually locked inside the box
+          _buildTextField('Phone Number', '912 345 6789', _phoneController, false, prefixText: '+63 ', maxLength: 11),
           const SizedBox(height: 30),
+          
+          // Save Button with Loading State
           ElevatedButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.save, color: Colors.white, size: 18),
-            label: const Text('Save Changes', style: TextStyle(color: Colors.white)),
+            onPressed: _isSaving ? null : _updateUserData,
+            icon: _isSaving 
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                : const Icon(Icons.save, color: Colors.white, size: 18),
+            label: Text(_isSaving ? 'Saving...' : 'Save Changes', style: const TextStyle(color: Colors.white)),
             style: ElevatedButton.styleFrom(
               backgroundColor: primaryGreen,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
@@ -105,23 +198,37 @@ class SettingsTab extends StatelessWidget {
     );
   }
 
-  Widget _buildTextField(String label, String placeholder) {
+  // Dynamic TextField Builder supporting readOnly and prefixText
+  Widget _buildTextField(String label, String placeholder, TextEditingController controller, bool isReadOnly, {String? prefixText, int? maxLength}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: const TextStyle(color: Colors.black87, fontSize: 13)),
         const SizedBox(height: 8),
-        SizedBox(
-          width: 500, // Matching the constrained width from your design
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500), 
           child: TextField(
+            controller: controller,
+            readOnly: isReadOnly,
+            keyboardType: prefixText != null ? TextInputType.phone : TextInputType.text, 
+            
+            // ✅ THIS ENFORCES THE LIMIT WITHOUT SHOWING AN UGLY CHARACTER COUNTER
+            inputFormatters: maxLength != null 
+                ? [LengthLimitingTextInputFormatter(maxLength), FilteringTextInputFormatter.digitsOnly] 
+                : null,
+                
+            style: TextStyle(color: isReadOnly ? Colors.black54 : Colors.black87),
             decoration: InputDecoration(
+              prefixText: prefixText,
+              prefixStyle: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 16),
               hintText: placeholder,
               hintStyle: const TextStyle(color: Colors.black54),
               filled: true,
-              fillColor: Colors.grey.shade50,
+              fillColor: isReadOnly ? Colors.grey.shade200 : Colors.grey.shade50,
               contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
               enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: primaryGreen)),
             ),
           ),
         ),
@@ -148,7 +255,6 @@ class SettingsTab extends StatelessWidget {
           const SizedBox(height: 20),
           ElevatedButton.icon(
             onPressed: () async {
-              // Actual Firebase Logout execution
               await FirebaseAuth.instance.signOut();
               if (context.mounted) {
                 Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const TISRMSLoginScreen()));

@@ -9,31 +9,30 @@ class ReportsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Detect if the screen is narrower than 850px (Mobile/Tablet view)
+    final bool isMobile = MediaQuery.of(context).size.width < 850;
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(30.0),
+      padding: EdgeInsets.all(isMobile ? 20.0 : 30.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildHeader(),
+          _buildHeader(isMobile),
           const SizedBox(height: 30),
-          _buildStatCards(),
+          _buildStatCards(isMobile),
           const SizedBox(height: 30),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: _buildBarChartCard()),
-              const SizedBox(width: 20),
-              Expanded(child: _buildPieChartCard()),
-            ],
-          ),
+          _buildChartsSection(isMobile),
         ],
       ),
     );
   }
 
-  Widget _buildHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildHeader(bool isMobile) {
+    // Replaced Row with Wrap so the dropdown and button drop down on small screens
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      runSpacing: 15,
       children: [
         const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -43,7 +42,9 @@ class ReportsTab extends StatelessWidget {
             Text('Comprehensive statistics and insights', style: TextStyle(color: Colors.black54)),
           ],
         ),
-        Row(
+        Wrap(
+          spacing: 15,
+          runSpacing: 10,
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 2),
@@ -58,7 +59,6 @@ class ReportsTab extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 15),
             ElevatedButton.icon(
               onPressed: () {},
               icon: const Icon(Icons.download_outlined, color: Colors.white, size: 18),
@@ -75,18 +75,41 @@ class ReportsTab extends StatelessWidget {
     );
   }
 
-  Widget _buildStatCards() {
-    return Row(
-      children: [
-        Expanded(child: _statCard('Total Students', '32')),
-        const SizedBox(width: 20),
-        Expanded(child: _statCard('Enrollments', '7')),
-        const SizedBox(width: 20),
-        Expanded(child: _statCard('Documents', '123')),
-        const SizedBox(width: 20),
-        Expanded(child: _statCard('Completion Rates', '95.5%')),
-      ],
-    );
+  Widget _buildStatCards(bool isMobile) {
+    // On mobile, create a 2x2 grid using Columns and Rows. On desktop, 1 row of 4.
+    if (isMobile) {
+      return Column(
+        children: [
+          Row(
+            children: [
+              Expanded(child: _statCard('Total Students', '32')),
+              const SizedBox(width: 15),
+              Expanded(child: _statCard('Enrollments', '7')),
+            ],
+          ),
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              Expanded(child: _statCard('Documents', '123')),
+              const SizedBox(width: 15),
+              Expanded(child: _statCard('Completion Rates', '95.5%')),
+            ],
+          ),
+        ],
+      );
+    } else {
+      return Row(
+        children: [
+          Expanded(child: _statCard('Total Students', '32')),
+          const SizedBox(width: 20),
+          Expanded(child: _statCard('Enrollments', '7')),
+          const SizedBox(width: 20),
+          Expanded(child: _statCard('Documents', '123')),
+          const SizedBox(width: 20),
+          Expanded(child: _statCard('Completion Rates', '95.5%')),
+        ],
+      );
+    }
   }
 
   Widget _statCard(String title, String count) {
@@ -103,35 +126,63 @@ class ReportsTab extends StatelessWidget {
         children: [
           Text(title, style: const TextStyle(color: Colors.black54, fontSize: 13)),
           const SizedBox(height: 10),
-          Text(count, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+          Text(count, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
         ],
       ),
     );
+  }
+
+  Widget _buildChartsSection(bool isMobile) {
+    // Stack charts vertically on mobile, side-by-side on desktop
+    if (isMobile) {
+      return Column(
+        children: [
+          _buildBarChartCard(),
+          const SizedBox(height: 20),
+          _buildPieChartCard(),
+        ],
+      );
+    } else {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: _buildBarChartCard()),
+          const SizedBox(width: 20),
+          Expanded(child: _buildPieChartCard()),
+        ],
+      );
+    }
   }
 
   // NATIVE BAR CHART MOCKUP
   Widget _buildBarChartCard() {
     return Container(
       padding: const EdgeInsets.all(25),
+      width: double.infinity,
       decoration: BoxDecoration(color: cardBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.black12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Students by Grade Level', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 40),
-          SizedBox(
-            height: 250,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                _barItem('215', 'Grade 7', 215, Colors.red.shade400),
-                _barItem('198', 'Grade 8', 198, Colors.deepOrange.shade400),
-                _barItem('187', 'Grade 9', 187, Colors.orange.shade400),
-                _barItem('176', 'Grade 10', 176, Colors.amber.shade400),
-                _barItem('234', 'Grade 11', 234, Colors.lightGreen.shade400),
-                _barItem('237', 'Grade 12', 237, Colors.green.shade500),
-              ],
+          // Added a horizontal scroll view so bars don't squish on tiny phones
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              height: 250,
+              width: 500, // Enforce a minimum width so bars stay proportional
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  _barItem('215', 'Grade 7', 215, Colors.red.shade400),
+                  _barItem('198', 'Grade 8', 198, Colors.deepOrange.shade400),
+                  _barItem('187', 'Grade 9', 187, Colors.orange.shade400),
+                  _barItem('176', 'Grade 10', 176, Colors.amber.shade400),
+                  _barItem('234', 'Grade 11', 234, Colors.lightGreen.shade400),
+                  _barItem('237', 'Grade 12', 237, Colors.green.shade500),
+                ],
+              ),
             ),
           ),
         ],
@@ -140,7 +191,6 @@ class ReportsTab extends StatelessWidget {
   }
 
   Widget _barItem(String value, String label, double heightVal, Color color) {
-    // Scaling the height slightly for UI purposes
     double renderedHeight = heightVal * 0.8; 
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
@@ -158,6 +208,7 @@ class ReportsTab extends StatelessWidget {
   Widget _buildPieChartCard() {
     return Container(
       padding: const EdgeInsets.all(25),
+      width: double.infinity,
       decoration: BoxDecoration(color: cardBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.black12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -177,21 +228,17 @@ class ReportsTab extends StatelessWidget {
   }
 }
 
-// Custom Painter to draw the Pie Chart without external packages
 class SimplePieChartPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final Rect rect = Rect.fromLTWH(0, 0, size.width, size.height);
     
-    // Draw Verified (Large Red slice based on Figma colors)
     final Paint paintRed = Paint()..color = Colors.red.shade500..style = PaintingStyle.fill;
     canvas.drawArc(rect, -pi / 2, 5.5, true, paintRed);
     
-    // Draw Pending (Orange slice)
     final Paint paintOrange = Paint()..color = Colors.orange.shade500..style = PaintingStyle.fill;
     canvas.drawArc(rect, -pi / 2 + 5.5, 0.7, true, paintOrange);
     
-    // Draw Borders around slices for that clean look
     final Paint borderPaint = Paint()..color = Colors.black87..style = PaintingStyle.stroke..strokeWidth = 1;
     canvas.drawArc(rect, -pi / 2, 5.5, true, borderPaint);
     canvas.drawArc(rect, -pi / 2 + 5.5, 0.7, true, borderPaint);
