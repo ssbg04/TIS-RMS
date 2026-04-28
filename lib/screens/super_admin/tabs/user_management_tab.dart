@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; 
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'dart:async'; // Needed for Search Debouncing
+import 'dart:async';
+import '../../../../services/user_management_service.dart';
+import '../../../widgets/custom_modal.dart';
 
 class UserManagementTab extends StatefulWidget {
   const UserManagementTab({super.key});
@@ -16,22 +16,23 @@ class _UserManagementTabState extends State<UserManagementTab> {
   final Color primaryGreen = const Color(0xFF0F8241);
   final Color cardBg = Colors.white;
 
+  final UserManagementService _userService = UserManagementService();
+
   String _searchQuery = '';
   String _selectedFilter = 'All Roles';
   bool _isAddingUser = false;
 
-  // --- PAGINATION VARIABLES ---
+  // --- PAGINATION STATE ---
   List<DocumentSnapshot> _users = [];
   bool _isLoading = false;
   bool _hasMore = true;
-  int _documentLimit = 10; // Number of users to fetch per page
   DocumentSnapshot? _lastDocument;
   Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
-    _fetchUsers(); // Fetch the first batch of users when the screen loads
+    _loadUsers();
   }
 
   @override
@@ -40,11 +41,9 @@ class _UserManagementTabState extends State<UserManagementTab> {
     super.dispose();
   }
 
-  // --- PAGINATION LOGIC ---
-  Future<void> _fetchUsers({bool refresh = false}) async {
+  Future<void> _loadUsers({bool refresh = false}) async {
     if (_isLoading) return;
 
-    // If refreshing (e.g., searching or changing roles), clear the current list
     if (refresh) {
       setState(() {
         _lastDocument = null;
@@ -58,48 +57,219 @@ class _UserManagementTabState extends State<UserManagementTab> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Base Query: Order alphabetically
-      Query query = FirebaseFirestore.instance.collection('users').orderBy('full_name');
+      // Call the external service instead of Firebase directly
+      UserFetchResult result = await _userService.fetchUsers(
+        lastDocument: _lastDocument,
+        searchQuery: _searchQuery,
+        roleFilter: _selectedFilter,
+      );
 
-      // 2. Filter by Role
-      if (_selectedFilter != 'All Roles') {
-        query = query.where('role', isEqualTo: _selectedFilter);
-      }
-
-      // 3. Search by Name (Prefix Search)
-      if (_searchQuery.isNotEmpty) {
-        query = query.where('full_name', isGreaterThanOrEqualTo: _searchQuery)
-                     .where('full_name', isLessThan: '$_searchQuery\uf8ff');
-      }
-
-      // 4. Start after the last document for pagination
-      if (_lastDocument != null) {
-        query = query.startAfterDocument(_lastDocument!);
-      }
-
-      // 5. Limit the results to our chunk size (e.g., 10)
-      query = query.limit(_documentLimit);
-
-      QuerySnapshot snapshot = await query.get();
-
-      // If we got fewer documents than our limit, there are no more left in the database
-      if (snapshot.docs.length < _documentLimit) {
-        _hasMore = false;
-      }
-
-      if (snapshot.docs.isNotEmpty) {
-        _lastDocument = snapshot.docs.last;
-        _users.addAll(snapshot.docs);
+      if (mounted) {
+        setState(() {
+          if (result.documents.isNotEmpty) {
+            _lastDocument = result.documents.last;
+            _users.addAll(result.documents);
+          }
+          _hasMore = result.hasMore;
+        });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error fetching users: $e'), backgroundColor: Colors.red));
-      }
+      if (mounted) _showSnackBar('Error fetching users: $e', Colors.red);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  Future<void> _deleteUser(String docId, String name) async {
+    bool confirm = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete User?'),
+        content: Text('Are you sure you want to remove $name? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true), 
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete')
+          ),
+        ],
+      )
+    ) ?? false;
+
+    if (confirm) {
+      try {
+        await _userService.deleteUser(docId); // Call external service
+        setState(() => _users.removeWhere((doc) => doc.id == docId));
+        _showSnackBar('$name has been removed.', Colors.red);
+      } catch (e) {
+        _showSnackBar('Error deleting user: $e', Colors.red);
+      }
+    }
+  }
+
+  void _showSnackBar(String message, Color color) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
+    }
+  }
+
+  // --- VALIDATION HELPER ---
+  bool _isValidEmail(String email) {
+    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+    return emailRegex.hasMatch(email);
+  }
+
+  void _showAddUserDialog(BuildContext context) {
+    final nameCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final passCtrl = TextEditingController();
+    String selectedRole = 'teacher';
+    
+    // Track validation errors
+    String? emailError;
+    String? phoneError;
+    String? passError;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            
+            // ✅ USING THE NEW CUSTOM MODAL MODULE
+            return CustomModal(
+              title: 'Add New User',
+              isSaving: _isAddingUser,
+              saveText: 'Save', // Matches the green button in your UI image
+              
+              // --- PASS YOUR STRICT VALIDATION LOGIC HERE ---
+              onSave: () async {
+                bool isValid = true;
+                setStateDialog(() {
+                  if (nameCtrl.text.trim().isEmpty) {
+                    _showSnackBar('Full name is required.', Colors.orange);
+                    isValid = false;
+                  }
+                  if (!_isValidEmail(emailCtrl.text.trim())) {
+                    emailError = 'Please enter a valid email format';
+                    isValid = false;
+                  }
+                  if (phoneCtrl.text.length != 11 || !phoneCtrl.text.startsWith('09')) {
+                    phoneError = 'Must be 11 digits starting with 09';
+                    isValid = false;
+                  }
+                  if (passCtrl.text.length < 6) {
+                    passError = 'Password must be at least 6 characters';
+                    isValid = false;
+                  }
+                });
+
+                if (!isValid) return; // Stop if validation fails
+
+                setStateDialog(() => _isAddingUser = true);
+
+                try {
+                  // Call external service instead of Firebase directly
+                  await _userService.createNewUser(
+                    fullName: nameCtrl.text.trim(),
+                    email: emailCtrl.text.trim(),
+                    phone: phoneCtrl.text.trim(),
+                    password: passCtrl.text.trim(),
+                    role: selectedRole,
+                  );
+
+                  if (mounted) {
+                    Navigator.pop(context); // Closes the modal
+                    _showSnackBar('${nameCtrl.text} registered successfully!', Colors.green);
+                    _loadUsers(refresh: true); // Refresh list
+                  }
+                } catch (e) {
+                  _showSnackBar('Error: $e', Colors.red);
+                } finally {
+                  setStateDialog(() => _isAddingUser = false);
+                }
+              },
+              
+              // --- FORM FIELDS STYLED TO MATCH FIGMA ---
+              content: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: nameCtrl, 
+                    decoration: InputDecoration(
+                      labelText: 'Full Name', 
+                      filled: true,
+                      fillColor: Colors.grey.shade200,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                  TextField(
+                    controller: emailCtrl, 
+                    decoration: InputDecoration(
+                      labelText: 'Email Address', 
+                      filled: true,
+                      fillColor: Colors.grey.shade200,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                      errorText: emailError,
+                    ),
+                    onChanged: (_) => setStateDialog(() => emailError = null),
+                  ),
+                  const SizedBox(height: 15),
+                  TextField(
+                    controller: phoneCtrl, 
+                    keyboardType: TextInputType.phone, 
+                    inputFormatters: [LengthLimitingTextInputFormatter(11), FilteringTextInputFormatter.digitsOnly],
+                    decoration: InputDecoration(
+                      labelText: 'Phone Number (09xx...)', 
+                      filled: true,
+                      fillColor: Colors.grey.shade200,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                      errorText: phoneError,
+                    ),
+                    onChanged: (_) => setStateDialog(() => phoneError = null),
+                  ),
+                  const SizedBox(height: 15),
+                  TextField(
+                    controller: passCtrl, 
+                    obscureText: true, 
+                    decoration: InputDecoration(
+                      labelText: 'Temporary Password', 
+                      filled: true,
+                      fillColor: Colors.grey.shade200,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                      errorText: passError,
+                    ),
+                    onChanged: (_) => setStateDialog(() => passError = null),
+                  ),
+                  const SizedBox(height: 15),
+                  DropdownButtonFormField<String>(
+                    value: selectedRole,
+                    decoration: InputDecoration(
+                      labelText: 'Assign Role', 
+                      filled: true,
+                      fillColor: Colors.grey.shade200,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'teacher', child: Text('Teacher')),
+                      DropdownMenuItem(value: 'admin', child: Text('Admin')),
+                    ],
+                    onChanged: (val) => setStateDialog(() => selectedRole = val!),
+                  )
+                ],
+              ),
+            );
+          }
+        );
+      }
+    );
+  }
+
+  // --- UI BUILDING CODE REMAINS THE SAME ---
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -169,12 +339,11 @@ class _UserManagementTabState extends State<UserManagementTab> {
                     constraints: const BoxConstraints(maxWidth: 250),
                     height: 35,
                     child: TextField(
-                      // DEBOUNCE SEARCH: Waits 500ms after you stop typing to fetch from Firebase
                       onChanged: (value) {
                         if (_debounce?.isActive ?? false) _debounce!.cancel();
                         _debounce = Timer(const Duration(milliseconds: 500), () {
                           setState(() => _searchQuery = value);
-                          _fetchUsers(refresh: true); // Reset pagination and fetch new search results
+                          _loadUsers(refresh: true);
                         });
                       },
                       decoration: InputDecoration(
@@ -200,7 +369,7 @@ class _UserManagementTabState extends State<UserManagementTab> {
                         style: const TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.bold),
                         onChanged: (String? newValue) {
                           setState(() => _selectedFilter = newValue!);
-                          _fetchUsers(refresh: true); // Reset pagination and filter by role
+                          _loadUsers(refresh: true);
                         },
                         items: <String>['All Roles', 'admin', 'teacher'].map<DropdownMenuItem<String>>((String value) {
                           return DropdownMenuItem<String>(
@@ -217,7 +386,6 @@ class _UserManagementTabState extends State<UserManagementTab> {
           ),
           const SizedBox(height: 20),
 
-          // --- PAGINATED DATA TABLE ---
           if (_users.isEmpty && !_isLoading)
             const Padding(padding: EdgeInsets.all(20), child: Text("No users found.", style: TextStyle(color: Colors.grey)))
           else
@@ -254,7 +422,6 @@ class _UserManagementTabState extends State<UserManagementTab> {
               ),
             ),
             
-          // --- LOAD MORE BUTTON ---
           if (_isLoading)
             const Center(child: Padding(padding: EdgeInsets.all(20.0), child: CircularProgressIndicator()))
           else if (_hasMore && _users.isNotEmpty)
@@ -262,7 +429,7 @@ class _UserManagementTabState extends State<UserManagementTab> {
               child: Padding(
                 padding: const EdgeInsets.only(top: 20.0),
                 child: TextButton.icon(
-                  onPressed: () => _fetchUsers(refresh: false),
+                  onPressed: () => _loadUsers(refresh: false),
                   icon: const Icon(Icons.expand_more, size: 18),
                   label: const Text('Load More Users'),
                   style: TextButton.styleFrom(foregroundColor: primaryGreen),
@@ -310,159 +477,6 @@ class _UserManagementTabState extends State<UserManagementTab> {
           ),
         ),
       ],
-    );
-  }
-
-  // --- DELETE USER LOGIC ---
-  Future<void> _deleteUser(String docId, String name) async {
-    bool confirm = await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete User?'),
-        content: Text('Are you sure you want to remove $name from the database? This cannot be undone.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true), 
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete')
-          ),
-        ],
-      )
-    ) ?? false;
-
-    if (confirm) {
-      await FirebaseFirestore.instance.collection('users').doc(docId).delete();
-      
-      // Update UI locally without doing a full refresh
-      setState(() {
-        _users.removeWhere((doc) => doc.id == docId);
-      });
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$name has been removed.'), backgroundColor: Colors.red));
-      }
-    }
-  }
-
-  // --- ADD NEW USER (SECONDARY FIREBASE APP WORKAROUND) ---
-  void _showAddUserDialog(BuildContext context) {
-    final nameCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
-    final passCtrl = TextEditingController();
-    String selectedRole = 'teacher';
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return StatefulBuilder( 
-          builder: (context, setStateDialog) {
-            return AlertDialog(
-              title: const Text('Register New User'),
-              content: SingleChildScrollView(
-                child: SizedBox(
-                  width: 400,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Full Name', border: OutlineInputBorder())),
-                      const SizedBox(height: 15),
-                      TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Email Address', border: OutlineInputBorder())),
-                      const SizedBox(height: 15),
-                      
-                      TextField(
-                        controller: phoneCtrl, 
-                        keyboardType: TextInputType.phone, 
-                        inputFormatters: [
-                          LengthLimitingTextInputFormatter(11),
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        decoration: const InputDecoration(
-                          labelText: 'Phone Number (09xx...)', 
-                          border: OutlineInputBorder(),
-                        )
-                      ),
-                      
-                      const SizedBox(height: 15),
-                      TextField(controller: passCtrl, obscureText: true, decoration: const InputDecoration(labelText: 'Temporary Password (Min 6 chars)', border: OutlineInputBorder())),
-                      const SizedBox(height: 15),
-                      DropdownButtonFormField<String>(
-                        value: selectedRole,
-                        decoration: const InputDecoration(labelText: 'Assign Role', border: OutlineInputBorder()),
-                        items: const [
-                          DropdownMenuItem(value: 'teacher', child: Text('Teacher')),
-                          DropdownMenuItem(value: 'admin', child: Text('Admin')),
-                        ],
-                        onChanged: (val) => setStateDialog(() => selectedRole = val!),
-                      )
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: _isAddingUser ? null : () => Navigator.pop(context),
-                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-                ),
-                ElevatedButton(
-                  onPressed: _isAddingUser ? null : () async {
-                    if (nameCtrl.text.isEmpty || emailCtrl.text.isEmpty || passCtrl.text.length < 6) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all fields. Password must be 6+ chars.'), backgroundColor: Colors.orange));
-                      return;
-                    }
-
-                    if (phoneCtrl.text.length != 11 || !phoneCtrl.text.startsWith('09')) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Phone number must be 11 digits starting with 09.'), backgroundColor: Colors.orange));
-                      return;
-                    }
-
-                    setStateDialog(() => _isAddingUser = true);
-
-                    try {
-                      FirebaseApp secondaryApp = await Firebase.initializeApp(
-                        name: 'SecondaryApp',
-                        options: Firebase.app().options,
-                      );
-
-                      UserCredential newCred = await FirebaseAuth.instanceFor(app: secondaryApp)
-                          .createUserWithEmailAndPassword(email: emailCtrl.text.trim(), password: passCtrl.text.trim());
-
-                      if (newCred.user != null) {
-                        await FirebaseFirestore.instance.collection('users').doc(newCred.user!.uid).set({
-                          'full_name': nameCtrl.text.trim(),
-                          'email': emailCtrl.text.trim(),
-                          'phone': phoneCtrl.text.trim(),
-                          'role': selectedRole,
-                          'created_at': FieldValue.serverTimestamp(),
-                        });
-                      }
-
-                      await secondaryApp.delete();
-
-                      if (mounted) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${nameCtrl.text} registered successfully!'), backgroundColor: Colors.green));
-                        // REFRESH THE TABLE TO SHOW THE NEW USER
-                        _fetchUsers(refresh: true);
-                      }
-                    } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
-                    } finally {
-                      setStateDialog(() => _isAddingUser = false);
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(backgroundColor: primaryGreen),
-                  child: _isAddingUser 
-                    ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
-                    : const Text('Create User', style: TextStyle(color: Colors.white)),
-                ),
-              ],
-            );
-          }
-        );
-      }
     );
   }
 }

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../../services/settings_service.dart'; // Import the new service
 import '../../auth/login_screen.dart'; 
 
 class SettingsTab extends StatefulWidget {
@@ -15,6 +14,8 @@ class _SettingsTabState extends State<SettingsTab> {
   final Color primaryGreen = const Color(0xFF0F8241);
   final Color cardBg = Colors.white;
 
+  final SettingsService _settingsService = SettingsService();
+
   // Controllers to hold the text data
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
@@ -22,6 +23,10 @@ class _SettingsTabState extends State<SettingsTab> {
 
   bool _isLoading = true;
   bool _isSaving = false;
+  
+  // Validation errors
+  String? _nameError;
+  String? _phoneError;
 
   @override
   void initState() {
@@ -37,86 +42,83 @@ class _SettingsTabState extends State<SettingsTab> {
     super.dispose();
   }
 
-  // --- 1. FETCH DATA FROM FIREBASE ---
+  // --- 1. CALL SERVICE TO FETCH DATA ---
   Future<void> _loadUserData() async {
     try {
-      final User? currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser != null) {
-        // Fetch the document from the 'users' collection using the UID
-        DocumentSnapshot userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUser.uid)
-            .get();
+      final userData = await _settingsService.getUserProfile();
 
-        if (userDoc.exists) {
-          final data = userDoc.data() as Map<String, dynamic>;
-          
-          // Handle the phone number conversion for the UI
-          String rawPhone = data['phone'] ?? '';
-          String displayPhone = rawPhone;
-          
-          // If it's stored as 09xx, strip the 0 so it sits nicely next to the +63
-          if (rawPhone.startsWith('0')) {
-            displayPhone = rawPhone.substring(1);
-          } else if (rawPhone.startsWith('+63')) {
-            displayPhone = rawPhone.substring(3).trim(); 
-          }
+      if (userData != null) {
+        // Handle the phone number conversion for the UI (+63 prefix handling)
+        String rawPhone = userData['phone'] ?? '';
+        String displayPhone = rawPhone;
+        
+        if (rawPhone.startsWith('0')) {
+          displayPhone = rawPhone.substring(1);
+        } else if (rawPhone.startsWith('+63')) {
+          displayPhone = rawPhone.substring(3).trim(); 
+        }
 
+        if (mounted) {
           setState(() {
-            _nameController.text = data['full_name'] ?? '';
-            _emailController.text = data['email'] ?? currentUser.email ?? '';
+            _nameController.text = userData['full_name'] ?? '';
+            _emailController.text = userData['email'] ?? userData['auth_email'] ?? '';
             _phoneController.text = displayPhone; 
             _isLoading = false;
           });
         }
+      } else {
+        _showSnackBar('User profile not found.', Colors.orange);
+        setState(() => _isLoading = false);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading profile: $e'), backgroundColor: Colors.red),
-        );
-      }
+      _showSnackBar('Error loading profile: $e', Colors.red);
       setState(() => _isLoading = false);
     }
   }
 
-  // --- 2. UPDATE DATA IN FIREBASE ---
+  // --- 2. VALIDATE AND CALL SERVICE TO UPDATE DATA ---
   Future<void> _updateUserData() async {
+    // Reset errors
+    setState(() {
+      _nameError = null;
+      _phoneError = null;
+    });
+
+    bool isValid = true;
+
+    // Validate Full Name
+    if (_nameController.text.trim().isEmpty) {
+      setState(() => _nameError = 'Full Name cannot be empty');
+      isValid = false;
+    }
+
+    // Validate Phone Number (Needs to be exactly 10 digits since +63 is prefixed)
+    if (_phoneController.text.trim().isNotEmpty && _phoneController.text.trim().length != 10) {
+      setState(() => _phoneError = 'Phone number must be exactly 10 digits');
+      isValid = false;
+    }
+
+    if (!isValid) return; // Stop if validation fails
+
     setState(() => _isSaving = true);
     
     try {
-      final User? currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser != null) {
-        
-        // Take the 9xx number from the UI and format it back to 09xx for the database
-        String formattedPhoneToSave = _phoneController.text.trim();
-        if (formattedPhoneToSave.startsWith('9') && formattedPhoneToSave.length == 10) {
-          formattedPhoneToSave = '0$formattedPhoneToSave';
-        }
+      await _settingsService.updateUserProfile(
+        fullName: _nameController.text,
+        phone: _phoneController.text,
+      );
 
-        // Update ONLY the full_name and phone fields
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUser.uid)
-            .update({
-          'full_name': _nameController.text.trim(),
-          'phone': formattedPhoneToSave, // Saves as 09xx safely to the cloud
-        });
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.green),
-          );
-        }
-      }
+      _showSnackBar('Profile updated successfully!', Colors.green);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error updating profile: $e'), backgroundColor: Colors.red),
-        );
-      }
+      _showSnackBar('Error updating profile: $e', Colors.red);
     } finally {
       if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  void _showSnackBar(String message, Color color) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
     }
   }
 
@@ -135,7 +137,6 @@ class _SettingsTabState extends State<SettingsTab> {
           const SizedBox(height: 30),
           _buildAccountInfoCard(),
           const SizedBox(height: 30),
-          _buildLogoutCard(context),
         ],
       ),
     );
@@ -168,19 +169,19 @@ class _SettingsTabState extends State<SettingsTab> {
           const Text('Account Information', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 30),
           
-          // Editable Full Name
-          _buildTextField('Full Name', 'Enter your full name', _nameController, false),
+          // Editable Full Name with validation
+          _buildTextField('Full Name', 'Enter your full name', _nameController, false, errorText: _nameError),
           const SizedBox(height: 20),
           
           // Read-only Email
           _buildTextField('Email Address', 'Enter your email', _emailController, true),
           const SizedBox(height: 20),
           
-          // Editable Phone Number with +63 visually locked inside the box
-          _buildTextField('Phone Number', '912 345 6789', _phoneController, false, prefixText: '+63 ', maxLength: 11),
+          // Editable Phone Number with +63 visually locked and limited to 10 digits
+          _buildTextField('Phone Number', '912 345 6789', _phoneController, false, prefixText: '+63 ', maxLength: 10, errorText: _phoneError),
           const SizedBox(height: 30),
           
-          // Save Button with Loading State
+          // Save Button
           ElevatedButton.icon(
             onPressed: _isSaving ? null : _updateUserData,
             icon: _isSaving 
@@ -198,8 +199,8 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
-  // Dynamic TextField Builder supporting readOnly and prefixText
-  Widget _buildTextField(String label, String placeholder, TextEditingController controller, bool isReadOnly, {String? prefixText, int? maxLength}) {
+  // Dynamic TextField Builder supporting readOnly, prefixText, input validation, and formatters
+  Widget _buildTextField(String label, String placeholder, TextEditingController controller, bool isReadOnly, {String? prefixText, int? maxLength, String? errorText}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -210,15 +211,17 @@ class _SettingsTabState extends State<SettingsTab> {
           child: TextField(
             controller: controller,
             readOnly: isReadOnly,
-            keyboardType: prefixText != null ? TextInputType.phone : TextInputType.text, 
-            
-            // ✅ THIS ENFORCES THE LIMIT WITHOUT SHOWING AN UGLY CHARACTER COUNTER
+            keyboardType: prefixText != null ? TextInputType.phone : TextInputType.text,
             inputFormatters: maxLength != null 
                 ? [LengthLimitingTextInputFormatter(maxLength), FilteringTextInputFormatter.digitsOnly] 
                 : null,
-                
             style: TextStyle(color: isReadOnly ? Colors.black54 : Colors.black87),
+            onChanged: (val) {
+              // Clear the error immediately as the user starts typing again
+              if (errorText != null) setState(() {}); 
+            },
             decoration: InputDecoration(
+              errorText: errorText, // Displays red validation text
               prefixText: prefixText,
               prefixStyle: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 16),
               hintText: placeholder,
@@ -233,45 +236,6 @@ class _SettingsTabState extends State<SettingsTab> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildLogoutCard(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(30),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.black12),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 5)],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Logout', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          const Text('Are you sure you want to logout from the system?', style: TextStyle(color: Colors.black54)),
-          const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-              if (context.mounted) {
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const TISRMSLoginScreen()));
-              }
-            },
-            icon: const Icon(Icons.logout, color: Colors.red, size: 18),
-            label: const Text('Logout', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade50,
-              elevation: 0,
-              side: BorderSide(color: Colors.red.shade300),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

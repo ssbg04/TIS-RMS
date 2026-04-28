@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../auth/login_screen.dart';
+import '../../widgets/custom_top_bar.dart';
 
 // Import the shared tabs
 import '../super_admin/tabs/dashboard_tab.dart';
@@ -59,7 +58,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             child: isMobile
                 ? Column(
                     children: [
-                      _buildTopBar(context, isMobile),
+                      CustomTopBar(isMobile: isMobile, roleName: 'Admin'),
                       Expanded(child: _pages[_selectedIndex]),
                     ],
                   )
@@ -70,7 +69,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       Expanded(
                         child: Column(
                           children: [
-                            _buildTopBar(context, isMobile),
+                            CustomTopBar(isMobile: isMobile, roleName: 'Admin'),
                             Expanded(child: _pages[_selectedIndex]),
                           ],
                         ),
@@ -170,62 +169,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
             Text(title, style: TextStyle(color: isActive ? primaryGreen : Colors.white, fontWeight: isActive ? FontWeight.bold : FontWeight.normal)),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildTopBar(BuildContext context, bool isMobile) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 15 : 30, vertical: 15),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Colors.black12, width: 1)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Responsive Search Bar
-          Expanded(
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 400),
-              height: 40,
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.black12)),
-              child: const TextField(
-                decoration: InputDecoration(
-                  hintText: 'Search...',
-                  hintStyle: TextStyle(fontSize: 14, color: Colors.grey),
-                  prefixIcon: Icon(Icons.search, color: Colors.grey),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 10),
-                ),
-              ),
-            ),
-          ),
-          
-          const SizedBox(width: 15),
-          
-          // Profile & Notifications
-          Row(
-            children: [
-              // 📱 RESPONSIVE: Hide the Notification icon and the "Admin" text on mobile!
-              if (!isMobile) ...[
-                const Icon(Icons.notifications, color: Color(0xFF0F8241)),
-                const SizedBox(width: 15),
-                const Text('Admin', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(width: 15),
-              ],
-              
-              InkWell(
-                onTap: () async {
-                  await FirebaseAuth.instance.signOut();
-                  if (context.mounted) {
-                    Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const TISRMSLoginScreen()));
-                  }
-                },
-                child: const CircleAvatar(backgroundColor: Colors.black12, child: Icon(Icons.person, color: Color(0xFF0F8241))),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
